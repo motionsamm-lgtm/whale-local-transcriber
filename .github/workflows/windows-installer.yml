@@ -1,0 +1,99 @@
+name: Build Whale Local for Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-x64:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: engine/requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Build the bundled transcription engine
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r engine/requirements.txt pyinstaller==6.22.3 nvidia-cublas-cu12 "nvidia-cudnn-cu12>=9,<10"
+          python -m PyInstaller --noconfirm --clean --onedir --console `
+            --name whale-engine `
+            --distpath engine/dist `
+            --workpath build/pyinstaller `
+            --specpath build/pyinstaller `
+            --collect-all faster_whisper `
+            --collect-all ctranslate2 `
+            --collect-all av `
+            --collect-all tokenizers `
+            --collect-all huggingface_hub `
+            --collect-all onnxruntime `
+            --collect-all nvidia.cublas `
+            --collect-all nvidia.cudnn `
+            engine/transcribe.py
+          if ($LASTEXITCODE -ne 0) { throw 'PyInstaller failed.' }
+          engine/dist/whale-engine/whale-engine.exe --check
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled engine smoke check failed.' }
+
+      - name: Install Node dependencies
+        shell: pwsh
+        run: |
+          npm ci --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed.' }
+          $electronInstaller = 'node_modules/.bin/install-electron.cmd'
+          if (-not (Test-Path $electronInstaller)) { throw 'Electron installer command is missing.' }
+          & $electronInstaller --no
+          if ($LASTEXITCODE -ne 0) { throw 'Electron runtime download failed.' }
+
+      - name: Set the build version
+        shell: pwsh
+        run: |
+          $manifest = Get-Content package.json -Raw | ConvertFrom-Json
+          $parts = $manifest.version.Split('.')
+          $version = "$($parts[0]).$($parts[1]).$env:GITHUB_RUN_NUMBER"
+          npm version $version --no-git-tag-version --allow-same-version
+          if ($LASTEXITCODE -ne 0) { throw 'Could not set the build version.' }
+
+      - name: Build installer
+        run: npm run dist:win
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Whale-Local-Windows-x64
+          path: release/Whale-Local-Setup-*-x64.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish update files and installer as a GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $manifest = Get-Content package.json -Raw | ConvertFrom-Json
+          $tag = "v$($manifest.version)"
+          $assets = @(Get-ChildItem 'release' -File | Where-Object { $_.Name -match 'Whale-Local-Setup-.*\.exe$|\.blockmap$|^latest\.yml$' } | ForEach-Object { $_.FullName })
+          if ($assets.Count -lt 2) { throw 'Installer and updater metadata were not generated.' }
+          gh release create $tag $assets --title "Whale Local $($manifest.version)" --generate-notes --latest
+          if ($LASTEXITCODE -ne 0) {
+            gh release upload $tag $assets --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'Could not publish the release assets.' }
+          }
