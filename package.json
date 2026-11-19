@@ -1,0 +1,58 @@
+{
+  "name": "whale-local-transcriber",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local three-mode transcription for Windows",
+  "author": "Whale Local",
+  "main": "main.js",
+  "dependencies": {
+    "electron-updater": "6.8.12"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.3.4",
+    "electron-builder": "26.18.1"
+  },
+  "build": {
+    "appId": "com.whalelocal.transcriber",
+    "productName": "Whale Local",
+    "asar": true,
+    "publish": [{
+      "provider": "github",
+      "owner": "motionsamm-lgtm",
+      "repo": "whale-local-transcriber",
+      "releaseType": "release"
+    }],
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "renderer.js",
+      "styles.css",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "engine/dist/whale-engine",
+        "to": "engine",
+        "filter": ["**/*"]
+      }
+    ],
+    "directories": {"output": "release"},
+    "win": {
+      "target": [{"target": "nsis", "arch": ["x64"]}],
+      "artifactName": "Whale-Local-Setup-${version}-x64.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Whale Local"
+    }
+  }
+}
