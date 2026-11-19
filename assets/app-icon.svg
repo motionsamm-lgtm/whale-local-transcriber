@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" rx="220" fill="#11191D"/>
+
+  <!-- One continuous whale silhouette: the flukes are part of the body. -->
+  <path fill="#D7E4DA" d="M880 377
+    C901 426 900 473 876 508
+    C915 520 950 549 976 594
+    C918 579 864 557 818 535
+    C782 521 751 519 724 529
+    C694 546 617 572 487 583
+    C370 581 251 560 203 534
+    C230 480 286 418 367 383
+    C454 346 557 341 634 378
+    C703 411 746 468 779 515
+    C810 484 850 428 880 377Z"/>
+
+  <path fill="#8DAFA3" d="M477 542
+    C517 549 557 575 584 607
+    C548 598 514 583 487 565
+    C479 560 475 551 477 542Z"/>
+
+  <circle cx="270" cy="508" r="11" fill="#11191D"/>
+
+  <!-- Six restrained audio bars connect the whale to transcription. -->
+  <g fill="none" stroke="#8DAFA3" stroke-linecap="round" stroke-width="17">
+    <path d="M352 677v26"/>
+    <path d="M421 654v49"/>
+    <path d="M490 667v36"/>
+    <path d="M559 642v61"/>
+    <path d="M628 658v45"/>
+    <path d="M697 677v26"/>
+  </g>
+</svg>
