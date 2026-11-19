@@ -75,6 +75,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1120, height: 780, minWidth: 820, minHeight: 620,
     backgroundColor: '#111214', title: 'Whale — Local Transcriber',
+    icon: path.join(__dirname, 'assets', 'app-icon.ico'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
   win.loadFile('index.html');
