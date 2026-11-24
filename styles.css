@@ -100,6 +100,14 @@ label:has(input[type="checkbox"]) { display: flex; align-items: center; gap: 8px
 .speaker { display: block; color: var(--accent); margin-bottom: 3px; }
 .warning { color: var(--warning); overflow-wrap: anywhere; }
 .reader > .warning { margin: 12px 16px; }
+.update-row {
+  border-top: 1px solid var(--line); margin-top: 8px; padding-top: 14px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px;
+}
+.update-row > div { min-width: 0; }
+.update-row strong { font-size: 13px; }
+.update-row p { margin: 4px 0 0; color: var(--muted); line-height: 1.4; overflow-wrap: anywhere; }
+.update-row button { flex: none; }
 .update-notice { max-width: 930px; margin: 14px auto 0; font-size: 12px; }
 dialog {
   padding: 0; width: min(450px, calc(100vw - 32px)); max-height: calc(100vh - 32px);

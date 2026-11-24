@@ -496,15 +496,30 @@ api.listTranscripts().then(history => {
 }).catch(error => { $('resultsSummary').textContent = 'Could not load transcript history. ' + error.message; });
 api.onAppUpdate(update => {
   const text = {
-    available: 'Downloading Whale Local ' + update.version,
+    checking: 'Checking for updates…',
+    available: 'Whale Local ' + update.version + ' found. Downloading…',
     downloading: 'Downloading Whale Local update · ' + update.percent + '%',
-    downloaded: 'Update downloaded. Whale Local will restart when the batch finishes.',
+    downloaded: 'Update downloaded. It will install when transcription is finished.',
     installing: 'Installing the Whale Local update',
-    error: ''
+    'up-to-date': 'Whale Local is up to date' + (update.version ? ' · ' + update.version : ''),
+    error: 'Could not check for updates. Check your internet and try again.'
   }[update.state];
+  $('updateStatus').textContent = text || 'Automatic update checks are active.';
   $('updateNotice').textContent = text || '';
   $('updateNotice').hidden = !text;
+  $('checkUpdates').disabled = ['checking', 'available', 'downloading', 'downloaded', 'installing'].includes(update.state);
 });
+
+$('checkUpdates').onclick = async () => {
+  $('checkUpdates').disabled = true;
+  $('updateStatus').textContent = 'Checking for updates…';
+  try {
+    await api.checkForUpdates();
+  } catch (error) {
+    $('updateStatus').textContent = 'Could not check for updates. Check your internet and try again.';
+    $('checkUpdates').disabled = false;
+  }
+};
 
 $('start').onclick = async () => {
   if (running || browsing) return;
