@@ -46,12 +46,15 @@ jobs:
             --collect-all tokenizers `
             --collect-all huggingface_hub `
             --collect-all onnxruntime `
+            --collect-all sherpa_onnx `
             --collect-all nvidia.cublas `
             --collect-all nvidia.cudnn `
             engine/transcribe.py
           if ($LASTEXITCODE -ne 0) { throw 'PyInstaller failed.' }
           engine/dist/whale-engine/whale-engine.exe --check
           if ($LASTEXITCODE -ne 0) { throw 'Bundled engine smoke check failed.' }
+          engine/dist/whale-engine/whale-engine.exe --check-speakers
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled speaker engine smoke check failed.' }
 
       - name: Install Node dependencies
         shell: pwsh
