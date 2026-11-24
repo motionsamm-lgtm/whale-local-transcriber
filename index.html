@@ -1,20 +1,142 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Whale — Local Transcriber</title><link rel="stylesheet" href="styles.css"></head>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'">
+  <title>Whale Local</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="renderer.js" defer></script>
+</head>
 <body>
-<div class="app-shell">
-  <header><div class="brand"><img class="brand-mark" src="assets/app-icon.svg" alt="" aria-hidden="true"><div><div class="brand-name">whale<span>local</span></div><div class="brand-sub">PRIVATE TRANSCRIPTION</div></div></div><div class="local-badge"><i></i> STAYS ON THIS PC</div></header>
-  <main>
-    <div class="eyebrow">YOUR AUDIO, TRANSCRIBED LOCALLY</div>
-    <h1>Get every word.</h1><p class="intro">Drop in a recording. Choose how carefully to transcribe it.</p>
-    <section class="mode-row" aria-label="Transcription mode">
-      <button class="mode" data-mode="cheetah"><span class="mode-icon">ϟ</span><span class="mode-name">Cheetah</span><span class="mode-hint">Quick draft</span></button>
-      <button class="mode" data-mode="dolphin"><span class="mode-icon">≈</span><span class="mode-name">Dolphin</span><span class="mode-hint">Balanced</span></button>
-      <button class="mode selected" data-mode="whale"><span class="mode-icon">◉</span><span class="mode-name">Whale</span><span class="mode-hint">Most accurate</span><span class="default-pill">DEFAULT</span></button>
-    </section>
-    <section class="upload" id="dropzone"><div class="upload-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg></div><h2>Drop your audio or video here</h2><p>or <button id="browse">browse files</button></p><small>MP3, WAV, M4A, MP4, MOV and more</small></section>
-    <div class="settings"><label for="language">Audio language</label><select id="language"><option value="auto">Auto detect</option><option value="en">English</option><option value="ur">Urdu</option><option value="hi">Hindi</option><option value="ar">Arabic</option><option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option><option value="ru">Russian</option><option value="zh">Chinese</option><option value="ja">Japanese</option></select><span>Choosing the spoken language can help accuracy.</span></div>
-    <div id="queue" class="queue"></div>
-    <div id="result" class="result hidden"><div class="result-top"><div><div class="result-label">TRANSCRIPT</div><div class="result-meta" id="resultMeta"></div></div><div class="result-actions"><button id="copy">Copy text</button><button id="openTxt">Open .txt</button><button id="openSrt">Open .srt</button></div></div><pre id="transcript"></pre></div>
-    <div class="bottom"><div class="privacy"><span>✳</span> Files are processed on your PC and are not uploaded.</div><button class="start" id="start" disabled>Transcribe with Whale <b>→</b></button></div>
-  </main><div id="updateNotice" class="update-notice hidden" role="status" aria-live="polite"></div><footer>LOCAL ENGINE · WHISPER · YOUR FILES STAY YOURS</footer>
-</div><script src="renderer.js"></script></body></html>
+  <header class="titlebar">
+    <img src="assets/app-icon.svg" alt="" width="25" height="25">
+    <strong>Whale Local</strong>
+  </header>
+  <div class="shell">
+    <aside class="sidebar">
+      <nav aria-label="Workspace">
+        <button id="navQueue" aria-current="page"><span aria-hidden="true">≡</span> Queue</button>
+        <button id="navResults"><span aria-hidden="true">▤</span> Transcripts <small id="resultCount" hidden></small></button>
+        <button id="openSettings"><span aria-hidden="true">⚙︎</span> Settings</button>
+      </nav>
+      <div class="local"><i></i> Runs on this PC</div>
+    </aside>
+    <main>
+      <section id="queuePage" class="page" aria-labelledby="queueTitle">
+        <div class="page-head">
+          <div><h1 id="queueTitle" tabindex="-1">Queue</h1><p id="queueSummary">Add recordings to get started.</p></div>
+          <button class="primary" id="browse">Add files</button>
+        </div>
+        <section class="dropzone" id="dropzone" aria-label="File drop area">
+          <div class="drop-icon" aria-hidden="true">↓</div>
+          <div><h2>Drop recordings here</h2><p>Audio and video, including MP3, WAV, MP4 and MOV</p></div>
+        </section>
+        <ul id="queue" class="file-list" aria-label="Queued recordings" hidden></ul>
+        <div class="queue-actions">
+          <button id="openOptions">Options <span id="modeSummary">· Whale</span></button>
+          <button class="primary" id="start" disabled>Transcribe</button>
+        </div>
+      </section>
+      <section id="resultsPage" class="page" aria-labelledby="resultsTitle" hidden>
+        <div class="page-head" id="resultsHeading">
+          <div><h1 id="resultsTitle" tabindex="-1">Transcripts</h1><p id="resultsSummary">Completed recordings appear here.</p></div>
+        </div>
+        <ul id="results" class="file-list" aria-label="Available transcripts" hidden></ul>
+        <button id="backToResults" hidden>← All transcripts</button>
+        <article id="reader" class="reader" hidden>
+          <header class="reader-head">
+            <div class="reader-name"><h2 id="readerTitle" tabindex="-1"></h2><p id="readerMeta"></p></div>
+            <button id="copy">Copy</button>
+            <button id="openSpeakers">Speakers</button>
+            <button id="openExport" class="primary">Export</button>
+          </header>
+          <div class="reader-options"><label><input type="checkbox" id="showTimes" checked> Show timestamps</label></div>
+          <p id="readerWarning" class="warning" hidden></p>
+          <ol id="transcript" class="transcript" aria-label="Transcript segments"></ol>
+        </article>
+      </section>
+      <p id="updateNotice" class="update-notice" role="status" hidden></p>
+    </main>
+  </div>
+  <div id="announcement" class="sr-only" role="status"></div>
+
+  <dialog id="optionsDialog" aria-labelledby="optionsTitle">
+    <form method="dialog">
+      <header><h2 id="optionsTitle">Transcription options</h2><button class="quiet" value="close" aria-label="Close options">×</button></header>
+      <div class="dialog-body">
+        <label for="mode">Transcription mode</label>
+        <select id="mode">
+          <option value="whale">Whale · Most accurate</option>
+          <option value="dolphin">Dolphin · Balanced</option>
+          <option value="cheetah">Cheetah · Quick draft</option>
+        </select>
+        <label for="language">Audio language</label>
+        <select id="language">
+          <option value="auto">Auto detect</option><option value="en">English</option>
+          <option value="ur">Urdu</option><option value="hi">Hindi</option>
+          <option value="ar">Arabic</option><option value="es">Spanish</option>
+          <option value="fr">French</option><option value="de">German</option>
+          <option value="ru">Russian</option><option value="zh">Chinese</option><option value="ja">Japanese</option>
+        </select>
+        <label class="check"><input type="checkbox" id="detectSpeakers"> Auto-detect speakers</label>
+        <div id="speakerCountField" hidden>
+          <label for="speakerCount">Expected speakers</label>
+          <select id="speakerCount"><option value="-1">Auto</option>
+            <option value="2">2 speakers</option><option value="3">3 speakers</option>
+            <option value="4">4 speakers</option><option value="5">5 speakers</option>
+            <option value="6">6 speakers</option><option value="7">7 speakers</option>
+            <option value="8">8 speakers</option><option value="9">9 speakers</option>
+            <option value="10">10 speakers</option>
+          </select>
+        </div>
+        <p>First use downloads speaker models. Recordings are processed locally.</p>
+      </div>
+      <footer><button class="primary">Done</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" aria-labelledby="settingsTitle">
+    <form method="dialog">
+      <header><h2 id="settingsTitle">Settings</h2><button class="quiet" value="close" aria-label="Close settings">×</button></header>
+      <div class="dialog-body">
+        <label for="theme">Appearance</label>
+        <select id="theme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">Follow Windows</option></select>
+      </div>
+      <footer><button class="primary">Done</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="exportDialog" aria-labelledby="exportTitle">
+    <form id="exportForm">
+      <header><h2 id="exportTitle">Export transcript</h2><button class="quiet" type="button" data-close="exportDialog" aria-label="Close export">×</button></header>
+      <div class="dialog-body">
+        <label class="check"><input type="checkbox" id="includeTxt" checked> Include transcript (.txt)</label>
+        <label class="check"><input type="checkbox" id="exportTimes" checked> Include timestamps in transcript</label>
+        <label class="check"><input type="checkbox" id="includeSrt"> Include subtitles (.srt)</label>
+        <p>Subtitle files always include cue timings.</p>
+        <p id="exportError" class="warning" role="alert" hidden></p>
+      </div>
+      <footer><button type="button" data-close="exportDialog">Cancel</button><button class="primary" id="saveExport">Save</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="speakersDialog" aria-labelledby="speakersTitle">
+    <form id="speakerForm">
+      <header><h2 id="speakersTitle">Speaker labels</h2><button class="quiet" type="button" data-close="speakersDialog" aria-label="Close speaker labels">×</button></header>
+      <div class="dialog-body">
+        <p>Rename a speaker across this transcript or label an individual segment.</p>
+        <div id="speakerFields"></div>
+        <label for="speakerLine">Segment</label>
+        <select id="speakerLine"></select>
+        <label for="lineSpeaker">Speaker for this segment</label>
+        <select id="lineSpeaker"></select>
+        <label id="newSpeakerLabel" for="newSpeaker" hidden>New speaker name</label>
+        <input id="newSpeaker" type="text" maxlength="80" hidden>
+        <p id="speakerError" class="warning" role="alert" hidden></p>
+      </div>
+      <footer><button type="button" data-close="speakersDialog">Cancel</button><button class="primary">Apply</button></footer>
+    </form>
+  </dialog>
+</body>
+</html>

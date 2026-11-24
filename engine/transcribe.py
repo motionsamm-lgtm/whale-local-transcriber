@@ -1,5 +1,9 @@
 import argparse, json, os, sys
 import re
+import subprocess
+import tempfile
+from types import SimpleNamespace
+from speakers import analyze, label_chunks
 from pathlib import Path
 
 MODES = {
@@ -39,7 +43,22 @@ def main():
     p.add_argument('--file'); p.add_argument('--mode', choices=MODES, default='whale')
     p.add_argument('--language', default='auto'); p.add_argument('--outdir')
     p.add_argument('--check', action='store_true', help='verify bundled transcription dependencies')
+    p.add_argument('--speakers', action='store_true')
+    p.add_argument('--speaker-cache')
+    p.add_argument('--speaker-count', type=int, choices=[-1, *range(2, 11)], default=-1)
+    p.add_argument('--speaker-worker', metavar='OUTPUT')
+    p.add_argument('--check-speakers', action='store_true')
     args = p.parse_args()
+    if args.check_speakers:
+        from sherpa_onnx import OfflineSpeakerDiarization
+        emit(stage='check', message='Speaker detection dependencies loaded.')
+        return 0
+    if args.speaker_worker:
+        turns = analyze(args.file, Path(args.speaker_cache), emit, args.speaker_count)
+        Path(args.speaker_worker).write_text(json.dumps([
+            {'start': turn.start, 'end': turn.end, 'speaker': turn.speaker} for turn in turns
+        ]), encoding='utf-8')
+        return 0
     expose_nvidia_runtime()
     try:
         from faster_whisper import WhisperModel
@@ -51,20 +70,23 @@ def main():
     if not args.file or not args.outdir:
         p.error('--file and --outdir are required unless --check is used')
 
+    if args.speakers and not args.speaker_cache:
+        p.error('--speaker-cache is required when speaker detection is enabled')
+
     cfg = MODES[args.mode]
-    emit(stage='loading', message=f'Loading {cfg["model"]} locally…')
+    emit(stage='loading', message=f'Loading {cfg["model"]} locally')
     device = 'cuda'
     try:
         model = WhisperModel(cfg['model'], device='cuda', compute_type='float16')
     except Exception as gpu_error:
-        emit(stage='loading', message='GPU setup unavailable; loading the same model on CPU…')
+        emit(stage='loading', message='GPU setup unavailable; loading the same model on CPU')
         device = 'cpu'
         try: model = WhisperModel(cfg['model'], device='cpu', compute_type='int8')
         except Exception as e:
             print(f'Could not load model (GPU: {gpu_error}; CPU: {e})', file=sys.stderr); return 3
 
     language = None if args.language.lower() == 'auto' else args.language
-    emit(stage='transcribing', message='Listening to the recording…')
+    emit(stage='transcribing', message='Listening to the recording')
     def transcribe_with(active_model):
         segments, info = active_model.transcribe(
             args.file, language=language, task='transcribe', beam_size=cfg['beam'],
@@ -94,8 +116,13 @@ def main():
                 recent.append(normalized)
                 recent = recent[-2:]
             transcript.append(segment_text)
-            chunks.append({'start': seg.start, 'end': seg.end, 'text': segment_text})
-            emit(stage='progress', seconds=seg.end, message=f'{int(seg.end)} seconds transcribed')
+            if segment_text:
+                chunk = {'start': seg.start, 'end': seg.end, 'text': segment_text}
+                if args.speakers and seg.words:
+                    chunk['words'] = [{'start': word.start, 'end': word.end, 'text': word.word}
+                                      for word in seg.words if word.start is not None and word.end is not None]
+                chunks.append(chunk)
+            emit(stage='progress', seconds=seg.end, duration=info.duration, message=f'{int(seg.end)} seconds transcribed')
         return info, chunks, '\n'.join(s for s in transcript if s), warning
 
     try:
@@ -104,10 +131,34 @@ def main():
         except Exception as gpu_error:
             if device != 'cuda':
                 raise
-            emit(stage='loading', message='CUDA runtime unavailable; retrying with CPU. This may take longer…')
+            emit(stage='loading', message='CUDA runtime unavailable; retrying with CPU. This may take longer')
             model = WhisperModel(cfg['model'], device='cpu', compute_type='int8')
             device = 'cpu'
             info, chunks, text, warning = transcribe_with(model)
+        if args.speakers and chunks:
+            try:
+                # Isolate the ONNX Runtime bundled by sherpa from Whisper's VAD runtime.
+                del model
+                with tempfile.TemporaryDirectory() as temp:
+                    output = Path(temp) / 'turns.json'
+                    command = [sys.executable]
+                    if not getattr(sys, 'frozen', False):
+                        command.append(str(Path(__file__).resolve()))
+                    command += ['--speaker-worker', str(output), '--file', args.file,
+                                '--speaker-cache', args.speaker_cache, '--speaker-count', str(args.speaker_count)]
+                    process = subprocess.run(command, check=False,
+                                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+                    if process.returncode != 0 or not output.is_file():
+                        raise RuntimeError('The local speaker worker failed. Check connectivity on first use and try again.')
+                    turns = [SimpleNamespace(**turn) for turn in json.loads(output.read_text(encoding='utf-8'))]
+                chunks = label_chunks(chunks, turns)
+                if not any(chunk.get('speaker') for chunk in chunks):
+                    raise ValueError('No reliable speaker labels were found.')
+            except Exception as error:
+                detail = f'Speaker detection did not complete: {error}'
+                warning = f'{warning} {detail}' if warning else detail
+        for chunk in chunks:
+            chunk.pop('words', None)
         outdir = Path(args.outdir); outdir.mkdir(parents=True, exist_ok=True)
         base = Path(args.file).stem
         txt_path = outdir / f'{base}.txt'; srt_path = outdir / f'{base}.srt'
