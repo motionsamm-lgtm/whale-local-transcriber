@@ -28,6 +28,8 @@ let win;
 let activeTranscriptions = 0;
 let updateDownloaded = false;
 let updateRestartScheduled = false;
+let updateCheckInFlight = null;
+let updateCheckIsManual = false;
 
 function sendUpdateStatus(state, extra = {}) {
   if (win && !win.isDestroyed()) win.webContents.send('app-update-status', { state, ...extra });
@@ -46,12 +48,38 @@ function restartToInstallUpdateWhenIdle() {
   }, 2500);
 }
 
+function requestUpdateCheck(manual = false) {
+  if (!app.isPackaged) {
+    if (manual) sendUpdateStatus('error', { manual: true });
+    return Promise.resolve(null);
+  }
+  if (manual) {
+    updateCheckIsManual = true;
+    sendUpdateStatus('checking');
+  }
+  if (updateCheckInFlight) return updateCheckInFlight;
+  updateCheckInFlight = autoUpdater.checkForUpdates()
+    .catch(error => {
+      console.warn('Automatic update check failed:', error.message);
+      if (updateCheckIsManual) sendUpdateStatus('error', { manual: true });
+      return null;
+    })
+    .finally(() => {
+      updateCheckInFlight = null;
+      updateCheckIsManual = false;
+    });
+  return updateCheckInFlight;
+}
+
 function startAutomaticUpdates() {
   if (!app.isPackaged) return;
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
   autoUpdater.on('update-available', info => sendUpdateStatus('available', { version: info.version }));
+  autoUpdater.on('update-not-available', () => {
+    if (updateCheckIsManual) sendUpdateStatus('up-to-date', { version: app.getVersion() });
+  });
   autoUpdater.on('download-progress', progress => sendUpdateStatus('downloading', { percent: Math.round(progress.percent) }));
   autoUpdater.on('update-downloaded', info => {
     updateDownloaded = true;
@@ -60,18 +88,16 @@ function startAutomaticUpdates() {
   });
   autoUpdater.on('error', error => {
     console.warn('Automatic update check failed:', error.message);
-    sendUpdateStatus('error');
+    if (updateCheckIsManual) sendUpdateStatus('error', { manual: true });
   });
 
-  const checkForUpdates = () => autoUpdater.checkForUpdates().catch(error => {
-    console.warn('Automatic update check failed:', error.message);
-  });
-  // Delay the first check so the window and session are ready, then keep checking
-  // while the app remains open. Updates download quietly and install automatically.
-  setTimeout(checkForUpdates, 12000);
-  setInterval(checkForUpdates, 4 * 60 * 60 * 1000);
+  // Start background checks after the UI is ready. Settings can also request
+  // a check without overlapping an automatic check already in progress.
+  setTimeout(() => requestUpdateCheck(false), 12000);
+  setInterval(() => requestUpdateCheck(false), 4 * 60 * 60 * 1000);
 }
 
+ipcMain.handle('check-for-updates', () => requestUpdateCheck(true));
 function createWindow() {
   win = new BrowserWindow({
     width: 1120, height: 780, minWidth: 560, minHeight: 460,
